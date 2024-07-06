@@ -12,9 +12,11 @@
 default: &default
   adapter: mysql2
   encoding: utf8mb4
-  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
-  username: root
-  password:
+  pool: <%= Rails.application.credentials.rails_max_threads { 5 } %>
+  username: <%= Rails.application.credentials.campaigner_database_username { 'root' } %>
+  password: <%= Rails.application.credentials.campaigner_database_password { 'root' } %>
+  host: <%= Rails.application.credentials.database_host { 'localhost' } %>
+  port: <%= Rails.application.credentials.database_port { 3306 } %>
   socket: /tmp/mysql.sock
 
 development:
