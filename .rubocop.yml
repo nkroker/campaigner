@@ -1,0 +1,19 @@
+require: rubocop-rails
+
+AllCops:
+  NewCops: enable
+  Exclude:
+    - 'db/schema.rb'
+    - 'bin/*'
+    - 'node_modules/**/*'
+    - 'vendor/**/*'
+    - 'config/**/*'
+    - 'Gemfile*'
+    - 'Rakefile'
+
+# Rails-specific configuration
+Rails:
+  Enabled: true
+
+Style/Documentation:
+  Enabled: false
