@@ -6,13 +6,18 @@ class UsersController < ApplicationController
   # Fetches all users
   def index
     @users = User.all
-    render json: @users
+
+    respond_to do |format|
+      format.html # renders index.html.erb
+      format.json { render json: @users }
+    end
   end
 
   # POST /users
   # Creates a new user
   def create
     @user = User.new(user_params)
+
     if @user.save
       render json: @user, status: :created
     else
@@ -23,9 +28,13 @@ class UsersController < ApplicationController
   # GET /users/filter
   # Filters users by campaign names
   def filter
-    campaign_names = params[:campaign_names].split(',')
+    campaign_names = params[:campaign_names].split(',').map(&:strip)
     @users = User.with_campaigns(campaign_names)
-    render json: @users
+
+    respond_to do |format|
+      format.html { render :index } # renders index.html.erb
+      format.json { render json: @users }
+    end
   end
 
   private

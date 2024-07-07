@@ -27,7 +27,7 @@ RSpec.describe UsersController, type: :controller do
     let!(:user) { create(:user, campaigns_list: [{ campaign_name: 'campaign1' }]) }
 
     it 'filters users by campaign name' do
-      get :filter, params: { campaign_names: 'campaign1' }
+      get :filter, params: { campaign_names: 'campaign1' }, format: :json
       expect(response.body).to include(user.name)
     end
   end
