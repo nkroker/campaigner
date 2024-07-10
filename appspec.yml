@@ -1,0 +1,15 @@
+version: 0.0
+os: linux
+files:
+  - source: /
+    destination: /var/www/campaigner
+hooks:
+  BeforeInstall:
+    - location: infra/scripts/before_install.sh
+      runas: root
+  AfterInstall:
+    - location: infra/scripts/after_install.sh
+      runas: root
+  ApplicationStart:
+    - location: infra/scripts/start_server.sh
+      runas: root

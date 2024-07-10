@@ -1,0 +1,19 @@
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Action": [
+				"cloudformation:*",
+				"ec2:*",
+				"rds:*",
+				"iam:*",
+				"codedeploy:*",
+				"s3:*",
+				"codepipeline:*",
+				"sts:AssumeRole"
+			],
+			"Resource": "*"
+		}
+	]
+}
