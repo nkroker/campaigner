@@ -1,0 +1,334 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Rails Application Stack for Campaigner
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: String
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.micro
+
+  DBUser:
+    Description: The database admin account username
+    Type: String
+    Default: admin
+
+  DBPassword:
+    Description: The database admin account password
+    Type: String
+    NoEcho: true
+
+  DBAllocatedStorage:
+    Description: The allocated storage size for the database (in GB)
+    Type: Number
+    Default: 20
+
+  GitHubRepository:
+    Description: GitHub repository in the format user/repo
+    Type: String
+    Default: nkroker/campaigner
+
+  GitHubBranch:
+    Description: The branch to deploy from the GitHub repository
+    Type: String
+    Default: main
+
+  GitHubOAuthToken:
+    Description: GitHub OAuth token for accessing the repository
+    Type: String
+    NoEcho: true
+
+Resources:
+  CampaignerVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: CampaignerVPC
+
+  CampaignerSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref CampaignerVPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: CampaignerSubnet1
+
+  CampaignerSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref CampaignerVPC
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: CampaignerSubnet2
+
+  CampaignerInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: CampaignerInternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref CampaignerVPC
+      InternetGatewayId: !Ref CampaignerInternetGateway
+
+  CampaignerRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref CampaignerVPC
+      Tags:
+        - Key: Name
+          Value: CampaignerRouteTable
+
+  CampaignerRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref CampaignerRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref CampaignerInternetGateway
+
+  CampaignerSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref CampaignerSubnet1
+      RouteTableId: !Ref CampaignerRouteTable
+
+  CampaignerSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref CampaignerSubnet2
+      RouteTableId: !Ref CampaignerRouteTable
+
+  CampaignerProduction:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      ImageId: ami-06c68f701d8090592 # You can use the latest Amazon Linux 2 AMI
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          SubnetId: !Ref CampaignerSubnet1
+          DeviceIndex: '0'
+          GroupSet:
+            - !Ref SecurityGroup
+      Tags:
+        - Key: Environment
+          Value: Production
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            set -e
+            sudo yum update -y
+            sudo yum install -y wget gcc openssl-devel libyaml-devel libffi-devel readline-devel zlib-devel gdbm-devel ncurses-devel ruby-devel gcc-c++ jq git --allowerasing
+            sudo yum install -y gcc --allowerasing
+            sudo wget https://aws-codedeploy-us-east-1.s3.amazonaws.com/latest/install
+            sudo chmod +x ./install
+            sudo ./install auto
+            sudo service codedeploy-agent start
+            curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+            sudo yum install -y nsolid --allowerasing
+            sudo npm install -g yarn
+            sudo yum install -y nginx --allowerasing
+            cat > /etc/nginx/conf.d/default.conf <<- EOM
+            server {
+                listen 80;
+                server_name _;
+                location / {
+                    proxy_pass http://localhost:3000;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+            }
+            EOM
+            sudo systemctl restart nginx
+            sudo yum install -y dirmngr gnupg2 --allowerasing
+            curl -sSL https://rvm.io/mpapis.asc | gpg2 --import -
+            curl -sSL https://rvm.io/pkuczynski.asc | gpg2 --import -
+            curl -sSL https://get.rvm.io | sudo bash -s stable
+            source /etc/profile.d/rvm.sh
+            sudo echo 'source /etc/profile.d/rvm.sh' >> /etc/profile
+            sudo echo 'source /etc/profile.d/rvm.sh' >> /home/ec2-user/.bashrc
+            sudo /usr/local/rvm/bin/rvm install 3.2.2
+            sudo /usr/local/rvm/bin/rvm use 3.2.2 --default
+            sudo /usr/local/rvm/bin/rvm cleanup all
+            sudo gem install bundler:2.5.10
+            while ! sudo /usr/local/rvm/bin/rvm list | grep -q 'ruby-3.2.2'; do
+                sleep 5
+            done
+            echo "Initialization complete"
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP and SSH
+      VpcId: !Ref CampaignerVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0
+
+  MySQLDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: campaignerdb
+      AllocatedStorage: !Ref DBAllocatedStorage
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: 8.0.35
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref SecurityGroup
+      PubliclyAccessible: true
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "Subnet group for Campaigner DB"
+      SubnetIds:
+        - !Ref CampaignerSubnet1
+        - !Ref CampaignerSubnet2
+
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codedeploy.amazonaws.com
+                - codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeDeployPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:CompleteLifecycleAction
+                  - autoscaling:DeleteLifecycleHook
+                  - autoscaling:DescribeAutoScalingGroups
+                  - autoscaling:DescribeLifecycleHooks
+                  - autoscaling:PutLifecycleHook
+                  - autoscaling:RecordLifecycleActionHeartbeat
+                  - codedeploy:*
+                  - cloudformation:*
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - ec2:DescribeTags
+                  - s3:Get*
+                  - s3:List*
+                  - sns:Publish
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: CampaignerApp
+      ComputePlatform: Server
+
+  CodeDeployDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentGroupName: CampaignerDeploymentGroup
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      Ec2TagFilters:
+        - Key: Environment
+          Value: Production
+          Type: KEY_AND_VALUE
+      AutoRollbackConfiguration:
+        Enabled: true
+        Events:
+          - DEPLOYMENT_FAILURE
+      DeploymentStyle:
+        DeploymentType: IN_PLACE
+        DeploymentOption: WITHOUT_TRAFFIC_CONTROL
+
+  PipelineArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: campaigner-pipeline-artifacts
+
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt CodeDeployServiceRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: 1
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                Owner: !Select [ 0, !Split [ /, !Ref GitHubRepository ] ]
+                Repo: !Select [ 1, !Split [ /, !Ref GitHubRepository ] ]
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GitHubOAuthToken
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: DeployAction
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeploy
+                Version: 1
+              InputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                ApplicationName: !Ref CodeDeployApplication
+                DeploymentGroupName: !Ref CodeDeployDeploymentGroup
+              RunOrder: 1
+      ArtifactStore:
+        Type: S3
+        Location: !Ref PipelineArtifactBucket
+
+Outputs:
+  InstanceId:
+    Description: The instance ID
+    Value: !Ref CampaignerProduction
+  DatabaseEndpoint:
+    Description: The database endpoint
+    Value: !GetAtt MySQLDatabase.Endpoint.Address
+  KeyPairName:
+    Description: Name of the generated key pair
+    Value: !Ref KeyName
