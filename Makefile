@@ -23,6 +23,7 @@ create-policy:
 		--policy-document file://infra/policy.json
 
 key-pair:
+	rm -rf infra/keys/campaigner-key.pem
 	if aws ec2 describe-key-pairs --key-names campaigner-key 2>&1 | grep -q 'InvalidKeyPair.NotFound'; then \
 		aws ec2 create-key-pair --key-name campaigner-key --query 'KeyMaterial' --output text > infra/keys/campaigner-key.pem; \
 		chmod 400 infra/keys/campaigner-key.pem; \
