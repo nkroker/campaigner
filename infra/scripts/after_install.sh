@@ -1,4 +1,5 @@
 #!/bin/bash
+sudo su
 cd /home/ec2-user/app
 gem install bundler -v 2.5.10
 bundle _2.5.10_ install
