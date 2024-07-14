@@ -38,13 +38,7 @@ destroy-stack:
 # For deploying the latest commit from GitHub
 deploy:
 	$(eval LATEST_COMMIT_ID := $(shell curl -H "Authorization: token $(GITHUB_OAUTH_TOKEN)" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$(REPO_OWNER)/$(REPO_NAME)/commits/$(BRANCH) | jq -r '.sha'))
-	aws deploy create-deployment \
-		--application-name CampaignerApp \
-		--deployment-group-name CampaignerDeploymentGroup \
-		--source
-		--revision revisionType=GitHub,gitHubLocation.repository=${REPO_OWNER}/${REPO_NAME},gitHubLocation.commitId=$(LATEST_COMMIT_ID) \
-		--description "Deploying latest commit to Campaigner"
-
+	aws deploy create-deployment --application-name CampaignerApp --deployment-group-name CampaignerDeploymentGroup --github-location repository=$(REPO_OWNER)/$(REPO_NAME),commitId=$(LATEST_COMMIT_ID)
 
 stack-deploy: key-pair
 	aws cloudformation create-stack --stack-name ${STACK_NAME} \

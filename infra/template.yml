@@ -114,12 +114,46 @@ Resources:
       SubnetId: !Ref CampaignerSubnet2
       RouteTableId: !Ref CampaignerRouteTable
 
+  CampaignerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref CampaignerRole
+
+  CampaignerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CampaignerPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:Get*
+                  - s3:List*
+                  - ec2:Describe*
+                  - codedeploy:*
+                  - cloudformation:Describe*
+                  - cloudformation:Get*
+                  - cloudformation:List*
+                  - iam:ListInstanceProfiles
+                  - iam:PassRole
+                Resource: '*'
+
   CampaignerProduction:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
-      ImageId: ami-06c68f701d8090592 # You can use the latest Amazon Linux 2 AMI
+      ImageId: ami-06c68f701d8090592 # Amazon Linux 2 AMI
       NetworkInterfaces:
         - AssociatePublicIpAddress: true
           SubnetId: !Ref CampaignerSubnet1
@@ -129,20 +163,21 @@ Resources:
       Tags:
         - Key: Environment
           Value: Production
+      IamInstanceProfile: !Ref CampaignerInstanceProfile
       UserData:
         Fn::Base64:
           !Sub |
             #!/bin/bash
             set -e
             sudo yum update -y
-            sudo yum install -y wget gcc openssl-devel libyaml-devel libffi-devel readline-devel zlib-devel gdbm-devel ncurses-devel ruby-devel gcc-c++ jq git --allowerasing
-            sudo yum install -y gcc --allowerasing
-            sudo wget https://aws-codedeploy-us-east-1.s3.amazonaws.com/latest/install
+            sudo yum install -y ruby wget gcc openssl-devel libyaml-devel libffi-devel readline-devel zlib-devel gdbm-devel ncurses-devel ruby-devel gcc-c++ jq git --allowerasing
+            sudo yum install gcc --allowerasing
+            sudo wget https://aws-codedeploy-${AWS::Region}.s3.amazonaws.com/latest/install
             sudo chmod +x ./install
             sudo ./install auto
             sudo service codedeploy-agent start
             curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-            sudo yum install -y nsolid --allowerasing
+            sudo yum install -y nodejs --allowerasing
             sudo npm install -g yarn
             sudo yum install -y nginx --allowerasing
             cat > /etc/nginx/conf.d/default.conf <<- EOM
@@ -159,21 +194,20 @@ Resources:
             }
             EOM
             sudo systemctl restart nginx
+            sudo mkdir /home/ec2-user/app
             sudo yum install -y dirmngr gnupg2 --allowerasing
             curl -sSL https://rvm.io/mpapis.asc | gpg2 --import -
-            curl -sSL https://rvm.io/pkuczynski.asc | gpg2 --import -
+            curl -sSL https://rvm.io/pkuczynski.asc | sudo gpg2 --import -
             curl -sSL https://get.rvm.io | sudo bash -s stable
             source /etc/profile.d/rvm.sh
-            sudo echo 'source /etc/profile.d/rvm.sh' >> /etc/profile
-            sudo echo 'source /etc/profile.d/rvm.sh' >> /home/ec2-user/.bashrc
             sudo /usr/local/rvm/bin/rvm install 3.2.2
             sudo /usr/local/rvm/bin/rvm use 3.2.2 --default
-            sudo /usr/local/rvm/bin/rvm cleanup all
-            sudo gem install bundler:2.5.10
-            while ! sudo /usr/local/rvm/bin/rvm list | grep -q 'ruby-3.2.2'; do
-                sleep 5
-            done
-            echo "Initialization complete"
+            sudo /usr/local/rvm/bin/rvm rubygems current
+            sudo usermod -a -G rvm ec2-user
+            sudo chown -R ec2-user:ec2-user /usr/local/rvm
+            sudo chmod -R 755 /usr/local/rvm
+            sudo /usr/local/rvm/rubies/ruby-3.2.2/bin/gem install bundler -v 2.5.10
+            export PATH=$PATH:/usr/local/rvm/rubies/ruby-3.2.2/bin
 
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
