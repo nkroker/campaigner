@@ -170,7 +170,7 @@ Resources:
             #!/bin/bash
             set -e
             sudo yum update -y
-            sudo yum install -y ruby wget gcc openssl-devel libyaml-devel libffi-devel readline-devel zlib-devel gdbm-devel ncurses-devel ruby-devel gcc-c++ jq git --allowerasing
+            sudo yum install -y ruby wget gcc openssl-devel libyaml-devel libffi-devel readline-devel zlib-devel gdbm-devel ncurses-devel ruby-devel gcc-c++ jq git awscli --allowerasing
             sudo yum install gcc --allowerasing
             sudo wget https://aws-codedeploy-${AWS::Region}.s3.amazonaws.com/latest/install
             sudo chmod +x ./install
@@ -196,6 +196,7 @@ Resources:
             sudo systemctl restart nginx
             sudo yum install -y https://dev.mysql.com/get/mysql84-community-release-el9-1.noarch.rpm
             sudo yum install -y mysql-community-client
+            sudo yum install -y mysql-community-client mysql-devel --allowerasing
             sudo mkdir /home/ec2-user/app
             sudo yum install -y dirmngr gnupg2 --allowerasing
             curl -sSL https://rvm.io/mpapis.asc | gpg2 --import -

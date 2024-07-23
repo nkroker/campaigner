@@ -22,6 +22,8 @@ sudo mkswap /swapfile
 sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
+sudo yum install -y mysql-community-client mysql-devel --allowerasing
+
 # Install the bundler gem
 echo "Installing bundler..."
 sudo gem install bundler -v 2.5.10
